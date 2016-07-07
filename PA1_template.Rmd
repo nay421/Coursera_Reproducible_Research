@@ -1,0 +1,131 @@
+---
+title: "Reproducible Research - Week 2, Course Project"
+author: "by NA"
+date: "7 July 2016"
+output: html_document
+---
+
+This is a R markdown document for the course project 1 of *Reproducible Research* course. This assignment makes use of data from a personal activity monitoring device. This device collects data at 5 minute intervals through out the day. The data consists of two months of data from an anonymous individual collected during the months of October and November, 2012 and include the number of steps taken in 5 minute intervals each day.
+
+The variables included in this dataset are:
+
+*   steps: Number of steps taking in a 5-minute interval (missing values are coded as NA)
+
+*   date: The date on which the measurement was taken in YYYY-MM-DD format
+
+*   interval: Identifier for the 5-minute interval in which measurement was taken
+
+The dataset is stored in a comma-separated-value (CSV) file called **activity.csv** and there are a total of 17,568 observations in this dataset.
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+###Loading and pre-proceessing the data
+
+
+```{r datasummary, message=FALSE}
+act <- read.csv('activity.csv')
+summary(act)
+head(act)
+str(act)
+library(dplyr)
+act_by_date <- act %>% group_by(date)%>% summarise_each(funs(sum(.,na.rm=TRUE)))
+act_by_date
+```
+
+####Histogram of total number of steps per day
+```{r histogram, message=FALSE}
+library(ggplot2)
+ggplot(act_by_date, aes(steps, fill = 'magenta'))+geom_histogram()+theme(legend.position = 'none')+ggtitle('Histogram of total number of steps per day')
+```
+
+###Mean and Median number of steps taken each day
+```{r, message=FALSE}
+mean <- mean(act_by_date$steps, na.rm = TRUE)
+median <- median(act_by_date$steps, na.rm = TRUE)
+cat(paste('The mean number of steps taken each day is',mean, sep=' '))
+cat(paste('The median number of steps taken each day is',median, sep=' '))
+```
+
+###Time series plot of average number of steps
+```{r, message = FALSE, warning=FALSE}
+
+steps_by_interval <- act %>% group_by(interval)%>% summarise_each(funs(mean(.,na.rm=TRUE)))
+
+ggplot(data = steps_by_interval, aes(x=interval, y = steps))+geom_line(color = 'gold2')+ggtitle('Time series plot of average number of steps by 5 min interval')
+
+steps_by_date <- act %>% group_by(date)%>% summarise_each(funs(mean(.,na.rm=TRUE)))
+
+library(lubridate)
+steps_by_date$date <- ymd(steps_by_date$date)
+ggplot(data = na.omit(steps_by_date), aes(x = date, y = steps))+geom_line(color = 'red')+ggtitle('Time series plot of average number of steps by date')
+```
+
+###The 5-minute interval that, on average, contains the maximum number of steps
+
+```{r}
+steps_by_interval[which.max(steps_by_interval$steps),]
+```
+The interval 835 has the maximal number of steps (206).
+
+###Imputation of missing data
+
+```{r}
+sum(is.na(act))
+steps_by_interval
+```
+
+The total number of missing rows is 2304. 
+
+####Strategy for imputation - missing values (NAs) to be replaced with the average value of 5-min interval
+
+```{r}
+act_new <- act
+NAs <- is.na(act_new$steps)
+mean_interval <- tapply(act_new$steps, act_new$interval, mean, na.rm=TRUE, simplify=TRUE)
+act_new$steps[NAs] <- mean_interval[as.character(act_new$interval[NAs])]
+sum(is.na(act_new))
+```
+Missing values have been replaced and a new dataset(act_new) has been created.
+
+####Tatal steps each day and mean/median total steps per day using new dataset
+
+
+```{r , message=FALSE}
+act_new_by_date <- act_new %>% group_by(date)%>% summarise_each(funs(sum(.,na.rm=TRUE)))
+
+a<-ggplot(act_new_by_date, aes(steps, fill = 'magenta'))+geom_histogram()+theme(legend.position = 'none')+ggtitle('Histogram of total number of steps per day \nusing new dataset')+theme(title = element_text(size =8))
+
+b<-ggplot(act_by_date, aes(steps, fill = 'magenta'))+geom_histogram()+theme(legend.position = 'none')+ggtitle('Histogram of total number of steps per day')+theme(title = element_text(size =8))
+library(gridExtra)
+
+grid.arrange(a,b, ncol = 2)
+```
+
+###Mean and Median number of steps taken each day using new dataset
+```{r, message=FALSE}
+mean <- mean(act_new_by_date$steps, na.rm = TRUE)
+median <- median(act_new_by_date$steps, na.rm = TRUE)
+cat(paste('The mean number of steps taken each day is',mean, sep=' '))
+cat(paste('The median number of steps taken each day is',median, sep=' '))
+
+```
+
+After replacing NA values, the distribution of the data appears more gaussian and the mean and median became identical. 
+
+###Activity patterns between weekends and weekdays
+```{r, message=FALSE, warning=FALSE}
+library(lubridate)
+act_new$date <- ymd(act_new$date)
+act_new$days <- weekdays(act_new$date)
+act_new$wkdays <- ifelse(act_new$days == 'Saturday', 'weekend',
+                         ifelse(act_new$days == 'Sunday', 'weekend',
+                                'weekdays'))
+act_new$wkdays <- as.factor(act_new$wkdays)
+str(act_new)
+
+steps_by_interval_new <- act_new %>% group_by(interval, wkdays)%>% summarise_each(funs(mean))
+
+ggplot(data = steps_by_interval_new, aes(x=interval, y = steps))+geom_line(color = 'purple')+facet_wrap(~wkdays)+ggtitle('Time series plot of weekdays and weeken activity levels defined \nby average number of steps')
+```
